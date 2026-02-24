@@ -29,3 +29,16 @@ body {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
   text-align: start;
 }
+
+/* Dark Mode - DataTables Customization */
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background-color: #0d6efd;
+  color: white;
+  border-color: #0d6efd;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background-color: #0d6efd;
+  color: white;
+  border-color: #0d6efd;
+}
