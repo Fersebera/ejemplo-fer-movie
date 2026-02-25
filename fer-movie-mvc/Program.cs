@@ -1,5 +1,9 @@
 using fer_movie_mvc.Data;
+using fer_movie_mvc.Models;
+using fer_movie_mvc.Service;
 using maxi_movie_mvc.Data;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +15,44 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddDbContext<MovieDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("MovieDbContext")));
 
+// Add Identity
+builder.Services.AddIdentityCore<Usuario>(options =>
+{
+    options.SignIn.RequireConfirmedAccount = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredLength = 3;
+    options.Password.RequireUppercase = false;
+})
+.AddRoles<IdentityRole>()
+.AddEntityFrameworkStores<MovieDbContext>()
+.AddSignInManager();
+
+//manejo de cookie. Lo ponemos en default, pero hay que ponerlo.
+builder.Services.AddAuthentication(opt =>
+{
+    opt.DefaultScheme = IdentityConstants.ApplicationScheme;    
+})
+.AddIdentityCookies();
+
+builder.Services.ConfigureApplicationCookie(o =>
+{
+    o.ExpireTimeSpan = TimeSpan.FromMinutes(60);
+    o.SlidingExpiration = true;
+    o.LoginPath = "/Usuario/Login";
+    o.AccessDeniedPath = "/Usuario/AccessDenied";
+});
+
+//Servicios de archivos
+builder.Services.AddScoped<ImagenStorage>();
+builder.Services.Configure<FormOptions>(o => { o.MultipartBodyLengthLimit = 2 * 1024 * 1024; });
+
+//Servicios de email
+builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
+//Servicio LLM
+builder.Services.AddScoped<LlmService>();
+
 var app = builder.Build();
 
 // Invocar la ejecucion del dbseeder con un using scope
@@ -20,7 +62,9 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<MovieDbContext>();
-        DbSeeder.Seed(context);
+        var userManager = services.GetRequiredService<UserManager<Usuario>>();
+        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+        await DbSeeder.Seed(context, userManager, roleManager);
     }
     catch (Exception ex)
     {
@@ -41,6 +85,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
@@ -49,6 +94,5 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
-
 
 app.Run();

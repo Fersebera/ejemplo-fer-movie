@@ -1,9 +1,11 @@
-using System.Diagnostics;
 using fer_movie_mvc.Data;
 using fer_movie_mvc.Models;
+using fer_movie_mvc.Service;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
+using System.Security.Claims;
 
 namespace fer_movie_mvc.Controllers
 {
@@ -11,12 +13,14 @@ namespace fer_movie_mvc.Controllers
     {
         private readonly ILogger<HomeController> _logger;
         private readonly MovieDbContext _context;
-        private const int PageSize = 8;       
+        private const int PageSize = 8;
+        private readonly LlmService _llmService;
 
-        public HomeController(ILogger<HomeController> logger, MovieDbContext context)
+        public HomeController(ILogger<HomeController> logger, MovieDbContext context, LlmService llmService)
         {
             _logger = logger;
             _context = context;
+            _llmService = llmService;
         }
 
         public async Task<IActionResult> Index(int pagina = 1, string txtBusqueda = "", int generoId = 0)
@@ -61,6 +65,24 @@ namespace fer_movie_mvc.Controllers
             return View(peliculas);
         }
 
+        public async Task<IActionResult> Details(int Id)
+        {
+            var pelicula = await _context.Peliculas
+                .Include(p => p.Genero)
+                .Include(p => p.ListaReviews)
+                .ThenInclude(r => r.Usuario)
+                .FirstOrDefaultAsync(p => p.Id == Id);
+
+            ViewBag.UserReview = false;
+            if (User?.Identity?.IsAuthenticated == true && pelicula.ListaReviews != null)
+            {
+                string userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                ViewBag.UserReview = !(pelicula.ListaReviews.FirstOrDefault(r => r.UsuarioId == userId) == null);
+            }
+
+            return View(pelicula);
+        }
+
         public IActionResult Privacy()
         {
             return View();
@@ -70,6 +92,35 @@ namespace fer_movie_mvc.Controllers
         public IActionResult Error()
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Spoiler(string titulo)
+        {
+            try
+            {
+                var spoiler = await _llmService.ObtenerSpoilerAsync(titulo);
+                return Json(new { success = true, data = spoiler });
+
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Resumen(string titulo)
+        {
+            try
+            {
+                var resumen = await _llmService.ObtenerResumenAsync(titulo);
+                return Json(new { success = true, data = resumen });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
         }
     }
 }
